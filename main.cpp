@@ -85,6 +85,10 @@ void update(void *)
  */
 class DrawingArea : public Fl_Widget
 {
+    // TODO: create a linked list or a hash table for this
+    int clicked_pixels[80][2];
+    int clicked_pixels_index;
+
     void debug_print_squares()
     {
         // handle different debug levels
@@ -101,18 +105,32 @@ class DrawingArea : public Fl_Widget
                 {
                     for (int w = this->map->hitbox->unit_size * j; w < (j + 1) * this->map->hitbox->unit_size; w++)
                     {
-                        if (this->map->hitbox->data[i + j * this->map->hitbox->width])
+                        if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 1)
                         {
                             fl_color(FL_GREEN);
                             fl_point(k, w);
                         }
+                        else if (global_debug_level == 2 && this->map->hitbox->data[i + j * this->map->hitbox->width] == 2)
+                        {
+                            fl_color(FL_BLUE);
+                            fl_point(k, w);
+                        }
                         else
                         {
-                            fl_color(FL_WHITE);
+                            fl_color(FL_DARK3);
                             fl_point(k, w);
                         }
                     }
                 }
+            }
+        }
+
+        if (global_debug_level == 2)
+        {
+            for (int i = 0; i < this->clicked_pixels_index; i++)
+            {
+                fl_color(FL_YELLOW);
+                fl_point(this->clicked_pixels[i][0], this->clicked_pixels[i][1]);
             }
         }
     }
@@ -127,12 +145,32 @@ class DrawingArea : public Fl_Widget
         fl_pop_clip();
     }
 
+    int handle(int event)
+    {
+        switch (event)
+        {
+            case FL_PUSH:
+                if (Fl::event_button() == FL_LEFT_MOUSE)
+                {
+                    int x = Fl::event_x(), y = Fl::event_y();
+                    this->map->hitbox->data[(int) (floor((float) x/this->map->hitbox->unit_size) + floor((float) y/this->map->hitbox->unit_size) * this->map->hitbox->width)] = 2;
+                    this->clicked_pixels[this->clicked_pixels_index][0] = x;
+                    this->clicked_pixels[this->clicked_pixels_index][1] = y;
+                    this->clicked_pixels_index++;
+                    return 1;
+                }
+                return 0;
+        }
+        return 0;
+    }
+
 public:
     Map *map;
 
     DrawingArea(Map *map) : Fl_Widget(0, 0, map->img->w(), map->img->h())
     {
         this->map = map;
+        this->clicked_pixels_index = 0;
     }
 };
 
