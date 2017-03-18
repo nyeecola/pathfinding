@@ -1,2 +1,5 @@
 #vim
 *.swp
+
+#binaries
+main

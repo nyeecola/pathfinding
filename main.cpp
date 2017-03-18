@@ -9,12 +9,18 @@
 #include <FL/fl_draw.H>
 #include <FL/Fl_PNG_Image.H>
 #include <FL/fl_ask.H>
-#include <FL/Fl_Box.H>
 
-#define FRAME_TIME 0.1
+#define FRAME_TIME 0.0166f
+#define FLOOR_SIZE 15
 
 using namespace std;
 
+// controls debug_information shown, higher means more and 0 means no debug information.
+static int global_debug_level = 0;
+
+/*
+   Defines a map's collision mask.
+ */
 typedef struct MapHitbox_
 {
     int width, height;
@@ -22,99 +28,47 @@ typedef struct MapHitbox_
     unsigned char *data;
 } MapHitbox;
 
-Fl_PNG_Image *img;
-MapHitbox *global_img_hitbox;
-
 /*
-   Draws a grid on the screen using the global variable `gofl` and the #define `MAX_SIZE`.
-
-   @cell_size :: the size of a single cell to be drawn on the screen 
-   @offset_x  :: the margin to the left of the grid
-   @offset_y  :: the margin to the top of the grid
+   Defines a map that has a visual representation (img) and a collision mask (hitbox).
  */
-/*void draw_grid(int cell_size, int offset_x, int offset_y)
+class Map
 {
-    int pos_y = 0;
-    int pos_x = 0;
-    int cell_color = FL_RED;
-    for (int i = 0; i < MAX_SIZE ; i++)
-    {
-        pos_y = offset_y + i*cell_size;
-        for (int j = 0; j < MAX_SIZE; j++)
-        {
-            pos_x = offset_x + j*cell_size;
-            //if (gofl.gofl_table[i][j]) cell_color = FL_WHITE;
-            else cell_color = FL_RED;
-            fl_rectf(pos_x, pos_y, cell_size, cell_size, cell_color);
-            fl_color(FL_WHITE);
-            fl_line(pos_x, offset_y, pos_x, offset_y + MAX_SIZE*cell_size);
-        }
-        fl_line(offset_x, pos_y, offset_x + MAX_SIZE*cell_size, pos_y);
-    }
-    pos_x += cell_size;
-    pos_y += cell_size;
-    fl_line(pos_x, offset_y, pos_x, offset_y + MAX_SIZE*cell_size);
-    fl_line(offset_x, pos_y, offset_x + MAX_SIZE*cell_size, pos_y);
-}
-*/
+public:
+    Fl_PNG_Image *img;
+    MapHitbox *hitbox;
 
-// NOTE: currently assuming a pixel size of 3 bytes (RGB)
-MapHitbox *create_image_hitbox(const unsigned char *data, int width, int height, int hitbox_unit_size)
-{
-    MapHitbox *image_hitbox = (MapHitbox *) malloc(sizeof(MapHitbox));
-    image_hitbox->unit_size = hitbox_unit_size;
-    image_hitbox->width = ceil((float) width / image_hitbox->unit_size);
-    image_hitbox->height = ceil((float) height / image_hitbox->unit_size);
-    image_hitbox->data = (unsigned char *) malloc(3 * image_hitbox->width * image_hitbox->height);
-
-    cout << image_hitbox->width << " " << image_hitbox->height << endl;
-    for (int i = 0; i < image_hitbox->width; i++)
+    void create_image_hitbox(int hitbox_unit_size)
     {
-        for (int j = 0; j < image_hitbox->height; j++)
+        this->hitbox = (MapHitbox *) malloc(sizeof(MapHitbox));
+        this->hitbox->unit_size = hitbox_unit_size;
+        this->hitbox->width = ceil((float) this->img->w() / this->hitbox->unit_size);
+        this->hitbox->height = ceil((float) this->img->h() / this->hitbox->unit_size);
+        this->hitbox->data = (unsigned char *) malloc(3 * this->hitbox->width * this->hitbox->height);
+
+        for (int i = 0; i < this->hitbox->width; i++)
         {
-            int counter = 0;
-            for (int k = image_hitbox->unit_size * i * 3; k < (i + 1) * image_hitbox->unit_size * 3 && k < width * 3; k+=3)
+            for (int j = 0; j < this->hitbox->height; j++)
             {
-                for (int w = image_hitbox->unit_size * j; w < (j + 1) * image_hitbox->unit_size && w < height; w++)
+                int counter = 0;
+                for (int k = this->hitbox->unit_size * i * 3; k < (i + 1) * this->hitbox->unit_size * 3 && k < this->img->w() * 3; k+=3)
                 {
-                    if (!data[w * width * 3 + k] && !data[w * width * 3 + k + 1] && !data[w * width * 3 + k + 2]) counter++;
-                    //if (i > 2 && i < 7 && j > 0 && j < 4) cout << "TEST" << i << " " << j << endl; 
-                }
-            }
-            //cout << "counter for square " << i << " " << j << ": " << counter << endl;
-            if ((float) counter / pow(image_hitbox->unit_size, 2) > 0.2) image_hitbox->data[i + j * image_hitbox->width] = 1;
-            else image_hitbox->data[i + j * image_hitbox->width] = 0;
-        }
-    }
-
-    return image_hitbox;
-}
-
-void debug_create_squares()
-{
-    for (int i = 0; i < global_img_hitbox->width; i++)
-    {
-        for (int j = 0; j < global_img_hitbox->height; j++)
-        {
-            for (int k = global_img_hitbox->unit_size * i; k < (i + 1) * global_img_hitbox->unit_size; k+=3)
-            {
-                for (int w = global_img_hitbox->unit_size * j; w < (j + 1) * global_img_hitbox->unit_size; w++)
-                {
-                    if (global_img_hitbox->data[i + j * global_img_hitbox->width])
+                    for (int w = this->hitbox->unit_size * j; w < (j + 1) * this->hitbox->unit_size && w < this->img->h(); w++)
                     {
-                        fl_color(FL_GREEN);
-                        fl_point(k, w);
-                    }
-                    else
-                    {
-                        fl_color(FL_WHITE);
-                        fl_point(k, w);
+                        if (!this->img->array[w * img->w() * 3 + k] && !this->img->array[w * img->w() * 3 + k + 1] && !this->img->array[w * this->img->w() * 3 + k + 2]) counter++;
                     }
                 }
+                if ((float) counter / pow(this->hitbox->unit_size, 2) > 0.25) this->hitbox->data[i + j * this->hitbox->width] = 1;
+                else this->hitbox->data[i + j * this->hitbox->width] = 0;
             }
         }
     }
-}
+
+    Map (Fl_PNG_Image *img, int hitbox_unit_size)
+    {
+        this->img = img;
+        this->create_image_hitbox(hitbox_unit_size);
+    }
+};
 
 /*
    Updates the game and redraws the screen after a periodic delay of `FRAME_TIME` seconds.
@@ -126,49 +80,108 @@ void update(void *)
 }
 
 /*
-   Drawing area, the draw() procedure is called once every frame.
+   DrawingArea area, the draw() procedure is called once every frame.
+   It is necessary to specify a map to be drawn when instancing this class.
  */
-class Drawing : public Fl_Widget {
-    void draw() {
-        img->draw(0, 0);
+class DrawingArea : public Fl_Widget
+{
+    void debug_print_squares()
+    {
+        // handle different debug levels
+        int k_increment = 1;
+        if (global_debug_level == 1) k_increment = 3;
+        else if (global_debug_level == 2) k_increment = 1;
+
+        // show hitboxes
+        for (int i = 0; i < this->map->hitbox->width; i++)
+        {
+            for (int j = 0; j < this->map->hitbox->height; j++)
+            {
+                for (int k = this->map->hitbox->unit_size * i; k < (i + 1) * this->map->hitbox->unit_size; k+=k_increment)
+                {
+                    for (int w = this->map->hitbox->unit_size * j; w < (j + 1) * this->map->hitbox->unit_size; w++)
+                    {
+                        if (this->map->hitbox->data[i + j * this->map->hitbox->width])
+                        {
+                            fl_color(FL_GREEN);
+                            fl_point(k, w);
+                        }
+                        else
+                        {
+                            fl_color(FL_WHITE);
+                            fl_point(k, w);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void draw()
+    {
+        map->img->draw(0, 0);
         fl_push_clip(x(),y(),w(),h());
         fl_push_matrix();
-        //draw_grid(11, 11, 12);
-        //draw_image_hitbox();
-        debug_create_squares();
+        if(global_debug_level) this->debug_print_squares();
         fl_pop_matrix();
         fl_pop_clip();
     }
-    public:
-    Drawing(int X,int Y,int W,int H) : Fl_Widget(X,Y,W,H) {}
+
+public:
+    Map *map;
+
+    DrawingArea(Map *map) : Fl_Widget(0, 0, map->img->w(), map->img->h())
+    {
+        this->map = map;
+    }
 };
+
+/*
+   Handles events that every widget has ignored.
+
+   @ event :: type of the event to be handled or ignored
+ */
+int global_event_handler(int event)
+{
+    switch (event)
+    {
+        case FL_SHORTCUT:
+            if (!strcmp(Fl::event_text(),"1")) global_debug_level = 0;
+            else if (!strcmp(Fl::event_text(),"2")) global_debug_level = 1;
+            else if (!strcmp(Fl::event_text(),"3")) global_debug_level = 2;
+            else return 0;
+            return 1;
+    }
+
+    return 0;
+}
 
 /*
    Entry point.
  */
 int main(int argc, char** argv) {
 
-    // try to open input file
-    img = new Fl_PNG_Image("./test2.png");
+    // try to open input file and load image
+    Fl_PNG_Image *img = new Fl_PNG_Image("./test2.png");
     if (img->fail())
     {
         fl_alert("./test.png: %s", strerror(errno));
         exit(1);
     }
 
-    // TODO IN PROGRESS:
-    global_img_hitbox = create_image_hitbox(img->array, img->w(), img->h(), 5);
+    // create map using the loaded image
+    Map *map = new Map(img, FLOOR_SIZE);
 
     // create window and drawing area
-    Fl_Double_Window window(img->w(), img->h());
-    Drawing drawing(0, 0, img->w(), img->h());
-    //Fl_Box *box = new Fl_Box(0, 0, img->w(), img->h());
+    Fl_Double_Window window(map->img->w(), map->img->h());
+    DrawingArea drawing_area(map);
     window.end();
-    drawing.image(img);
-    fl_alert("W:H = %d:%d; Pixel size = %d bytes;", img->w(), img->h(), img->d()); 
 
     // show window
     window.show(argc, argv);
+ 
+    // handle some events globally
+    Fl::add_handler(global_event_handler);
 
     // schedule a periodic update after a delay of `FRAME_TIME` seconds
     Fl::add_timeout(FRAME_TIME, update);
