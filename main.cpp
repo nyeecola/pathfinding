@@ -11,12 +11,103 @@
 #include <FL/fl_ask.H>
 
 #define FRAME_TIME 0.0166f
-#define FLOOR_SIZE 15
+#define FLOOR_SIZE 5
 
 using namespace std;
 
 // controls debug_information shown, higher means more and 0 means no debug information.
 static int global_debug_level = 0;
+
+class BinHeap
+{
+    int *data;
+    int current_size, max_size;
+
+    // TODO: remove this dirty hack
+    int *test_matrix;
+
+    void bubble_down(int index)
+    {
+        int left_child_index = 2 * index + 1;
+        int right_child_index = 2 * index + 2;
+
+        if (left_child_index > this->current_size) return;
+
+        int min_index = index;
+
+        if (this->test_matrix[this->data[index]] > this->test_matrix[this->data[left_child_index]]) min_index = left_child_index;
+        // if (this->data[index] > this->data[left_child_index]) min_index = left_child_index;
+        if ((right_child_index < this->current_size) && (this->test_matrix[this->data[min_index]] > this->test_matrix[this->data[right_child_index]])) min_index = right_child_index;
+        // if ((right_child_index < this->current_size) && (this->data[min_index] > this->data[right_child_index])) min_index = right_child_index;
+
+        if (min_index != index)
+        {
+            int temp = this->data[index];
+            this->data[index] = this->data[min_index];
+            this->data[min_index] = temp;
+            bubble_down(min_index);
+        }
+    }
+
+    void bubble_up(int index)
+    {
+        if (!index) return;
+
+        int parent_index = (index - 1) / 2;
+
+        // if (this->data[parent_index] > this->data[index])
+        if (this->test_matrix[this->data[parent_index]] > this->test_matrix[this->data[index]])
+        {
+            int temp = this->data[parent_index];
+            this->data[parent_index] = this->data[index];
+            this->data[index] = temp;
+            bubble_up(parent_index);
+        }
+    }
+
+public:
+    BinHeap(int max_size, int *matrix) // TODO: remove test matrix
+    {
+        this->test_matrix = matrix;
+        this->max_size = max_size;
+        this->data = (int *) malloc(this->max_size * sizeof(int));
+        this->current_size = 0;
+    }
+
+    void insert(int value)
+    {
+        this->data[this->current_size] = value;
+        this->current_size++;
+
+        bubble_up(this->current_size - 1);
+    }
+
+    int get_next()
+    {
+        if (!this->current_size) return -1;
+
+        return this->data[0];
+    }
+    
+    void remove_next()
+    {
+        if (!this->current_size) return;
+
+        this->data[0] = this->data[this->current_size - 1];
+        this->current_size--;
+
+        bubble_down(0);
+    }
+
+    int pop_next()
+    {
+        int next = this->get_next();
+
+        this->remove_next();
+
+        return next;
+    }
+};
 
 /*
    Defines a map's collision mask.
@@ -63,12 +154,252 @@ public:
         }
     }
 
-    Map (Fl_PNG_Image *img, int hitbox_unit_size)
+    Map(Fl_PNG_Image *img, int hitbox_unit_size)
     {
         this->img = img;
         this->create_image_hitbox(hitbox_unit_size);
     }
 };
+
+/*
+
+
+   @ start
+
+   @ returns    :: 0 if the path was found, -1 if there is no path
+ */
+int find_path_astar(Map *map, int start, int end, int *path, int path_max_size, int *found_path_size)
+{
+    int map_size = map->hitbox->width * map->hitbox->height;
+    int *list = (int *) calloc(map_size, sizeof(int));
+    int *parents = (int *) calloc(map_size, sizeof(int));
+    int *f_costs = (int *) calloc(map_size, sizeof(int));
+    int *g_costs = (int *) calloc(map_size, sizeof(int));
+    BinHeap heap(map_size, f_costs);
+
+    enum {OPEN = 1, CLOSED = 2};
+
+    bool path_found = false;
+
+    // add the starting node to the open list and the heap
+    list[start] = OPEN;
+    heap.insert(start);
+    
+    //
+    for (;;)
+    {
+        // find lowest cost square on the open list
+        int current_square = heap.pop_next();
+
+        if (current_square == end)
+        {
+            path_found = true;
+            break;
+        }
+
+        if (current_square == -1) break;
+
+        // move it to the closed list
+        list[current_square] = CLOSED;
+
+        for (int j = current_square - map->hitbox->width - 1; j <= current_square - map->hitbox->width + 1; j++)
+        {
+            if (j < 0) break;
+            if (j < ((current_square / map->hitbox->width) - 1) * (map->hitbox->width) || j >= (current_square / map->hitbox->width) * (map->hitbox->width)) continue;
+
+            if (map->hitbox->data[j] != 1 && list[j] != CLOSED)
+            {
+                if (list[j] != OPEN)
+                {
+                    list[j] = OPEN;
+                    parents[j] = current_square;
+
+                    int g_cost;
+                    if (j == current_square - map->hitbox->width) g_cost = g_costs[current_square] + 10;
+                    else g_cost = g_costs[current_square] + 14;
+
+                    int y_offset = abs((j / map->hitbox->width) - (end / map->hitbox->width)) * 10;
+                    int x_offset = abs((j - (j / map->hitbox->width) * map->hitbox->width) - (end - (end / map->hitbox->width) * map->hitbox->width)) * 10;
+                    int h_cost = x_offset + y_offset;
+
+                    g_costs[j] = g_cost;
+                    f_costs[j] = g_cost + h_cost;
+
+                    heap.insert(j);
+                }
+                else
+                {
+                    int g_cost;
+                    if (j == current_square - map->hitbox->width) g_cost = g_costs[current_square] + 10;
+                    else g_cost = g_costs[current_square] + 14;
+
+                    if (g_cost < g_costs[j])
+                    {
+                        parents[j] = current_square;
+
+                        int y_offset = abs((j / map->hitbox->width) - (end / map->hitbox->width)) * 10;
+                        int x_offset = abs((j - (j / map->hitbox->width) * map->hitbox->width) - (end - (end / map->hitbox->width) * map->hitbox->width)) * 10;
+                        int h_cost = x_offset + y_offset;
+
+                        g_costs[j] = g_cost;
+                        f_costs[j] = g_cost + h_cost;
+                    }
+                }
+            }
+        }
+
+        int j = current_square - 1;
+        if (j >= (current_square / map->hitbox->width) * map->hitbox->width)
+        {
+            if (map->hitbox->data[j] != 1 && list[j] != CLOSED)
+            {
+                if (list[j] != OPEN)
+                {
+                    list[j] = OPEN;
+                    parents[j] = current_square;
+
+                    int g_cost;
+                    if (j == current_square - map->hitbox->width) g_cost = g_costs[current_square] + 10;
+                    else g_cost = g_costs[current_square] + 14;
+
+                    int y_offset = abs((j / map->hitbox->width) - (end / map->hitbox->width));
+                    int x_offset = abs((j - (j / map->hitbox->width) * map->hitbox->width) - (end - (end / map->hitbox->width) * map->hitbox->width));
+                    int h_cost = (x_offset + y_offset) * 10;
+
+                    g_costs[j] = g_cost;
+                    f_costs[j] = g_cost + h_cost;
+
+                    heap.insert(j);
+                }
+                else
+                {
+                    int g_cost;
+                    if (j == current_square - map->hitbox->width) g_cost = g_costs[current_square] + 10;
+                    else g_cost = g_costs[current_square] + 14;
+
+                    if (g_cost < g_costs[j])
+                    {
+                        parents[j] = current_square;
+
+                        int y_offset = abs((j / map->hitbox->width) - (end / map->hitbox->width));
+                        int x_offset = abs((j - (j / map->hitbox->width) * map->hitbox->width) - (end - (end / map->hitbox->width) * map->hitbox->width));
+                        int h_cost = (x_offset + y_offset) * 10;
+
+                        g_costs[j] = g_cost;
+                        f_costs[j] = g_cost + h_cost;
+                    }
+                }
+            }
+        }
+
+        j = current_square + 1;
+        if (j < ((current_square / map->hitbox->width) + 1) * (map->hitbox->width))
+        {
+            if (map->hitbox->data[j] != 1 && list[j] != CLOSED)
+            {
+                if (list[j] != OPEN)
+                {
+                    list[j] = OPEN;
+                    parents[j] = current_square;
+
+                    int g_cost;
+                    if (j == current_square - map->hitbox->width) g_cost = g_costs[current_square] + 10;
+                    else g_cost = g_costs[current_square] + 14;
+
+                    int y_offset = abs((j / map->hitbox->width) - (end / map->hitbox->width)) * 10;
+                    int x_offset = abs((j - (j / map->hitbox->width) * map->hitbox->width) - (end - (end / map->hitbox->width) * map->hitbox->width)) * 10;
+                    int h_cost = x_offset + y_offset;
+
+                    g_costs[j] = g_cost;
+                    f_costs[j] = g_cost + h_cost;
+
+                    heap.insert(j);
+                }
+                else
+                {
+                    int g_cost;
+                    if (j == current_square - map->hitbox->width) g_cost = g_costs[current_square] + 10;
+                    else g_cost = g_costs[current_square] + 14;
+
+                    if (g_cost < g_costs[j])
+                    {
+                        parents[j] = current_square;
+
+                        int y_offset = abs((j / map->hitbox->width) - (end / map->hitbox->width)) * 10;
+                        int x_offset = abs((j - (j / map->hitbox->width) * map->hitbox->width) - (end - (end / map->hitbox->width) * map->hitbox->width)) * 10;
+                        int h_cost = x_offset + y_offset;
+
+                        g_costs[j] = g_cost;
+                        f_costs[j] = g_cost + h_cost;
+                    }
+                }
+            }
+        }
+
+        for (int j = current_square + map->hitbox->width - 1; j <= current_square + map->hitbox->width + 1; j++)
+        {
+            if (j >= map->hitbox->width * map->hitbox->height) break;
+            if (j < ((current_square / map->hitbox->width) + 1) * (map->hitbox->width) || j >= ((current_square / map->hitbox->width) + 2) * (map->hitbox->width)) continue;
+
+            if (map->hitbox->data[j] != 1 && list[j] != CLOSED)
+            {
+                if (list[j] != OPEN)
+                {
+                    list[j] = OPEN;
+                    parents[j] = current_square;
+
+                    int g_cost;
+                    if (j == current_square + map->hitbox->width) g_cost = g_costs[current_square] + 10;
+                    else g_cost = g_costs[current_square] + 14;
+
+                    int y_offset = abs((j / map->hitbox->width) - (end / map->hitbox->width)) * 10;
+                    int x_offset = abs((j - (j / map->hitbox->width) * map->hitbox->width) - (end - (end / map->hitbox->width) * map->hitbox->width)) * 10;
+                    int h_cost = x_offset + y_offset;
+
+                    g_costs[j] = g_cost;
+                    f_costs[j] = g_cost + h_cost;
+
+                    heap.insert(j);
+                }
+                else
+                {
+                    int g_cost;
+                    if (j == current_square + map->hitbox->width) g_cost = g_costs[current_square] + 10;
+                    else g_cost = g_costs[current_square] + 14;
+
+                    if (g_cost < g_costs[j])
+                    {
+                        parents[j] = current_square;
+
+                        int y_offset = abs((j / map->hitbox->width) - (end / map->hitbox->width)) * 10;
+                        int x_offset = abs((j - (j / map->hitbox->width) * map->hitbox->width) - (end - (end / map->hitbox->width) * map->hitbox->width)) * 10;
+                        int h_cost = x_offset + y_offset;
+
+                        g_costs[j] = g_cost;
+                        f_costs[j] = g_cost + h_cost;
+                    }
+                }
+            }
+        }
+    }
+
+    // path not found
+    if (!path_found) return -1;
+
+    // path found
+    int current_square = end;
+    path[0] = current_square;
+    *found_path_size = 1;
+    for (int i = 1; current_square != start; i++)
+    {
+        current_square = parents[current_square];
+        path[i] = current_square;
+        *found_path_size += 1;
+    }
+
+    // success
+    return 0;
+}
 
 /*
    Updates the game and redraws the screen after a periodic delay of `FRAME_TIME` seconds.
@@ -115,6 +446,11 @@ class DrawingArea : public Fl_Widget
                             fl_color(FL_BLUE);
                             fl_point(k, w);
                         }
+                        else if (global_debug_level == 2 && this->map->hitbox->data[i + j * this->map->hitbox->width] == 3)
+                        {
+                            fl_color(FL_RED);
+                            fl_point(k, w);
+                        }
                         else
                         {
                             fl_color(FL_DARK3);
@@ -145,6 +481,10 @@ class DrawingArea : public Fl_Widget
         fl_pop_clip();
     }
 
+    int clicked_squares[2];
+    int *path;
+    int path_size;
+
     int handle(int event)
     {
         switch (event)
@@ -153,10 +493,40 @@ class DrawingArea : public Fl_Widget
                 if (Fl::event_button() == FL_LEFT_MOUSE)
                 {
                     int x = Fl::event_x(), y = Fl::event_y();
-                    this->map->hitbox->data[(int) (floor((float) x/this->map->hitbox->unit_size) + floor((float) y/this->map->hitbox->unit_size) * this->map->hitbox->width)] = 2;
+                    int index = (int) (floor((float) x/this->map->hitbox->unit_size) + floor((float) y/this->map->hitbox->unit_size) * this->map->hitbox->width);
+
+                    if (this->map->hitbox->data[index]) return 1;
+
+                    // TODO: do this better
+                    if (this->clicked_pixels_index <= 1) this->clicked_squares[this->clicked_pixels_index] = index;
+                    // END OF TODO
+
+                    this->map->hitbox->data[index] = 2;
                     this->clicked_pixels[this->clicked_pixels_index][0] = x;
                     this->clicked_pixels[this->clicked_pixels_index][1] = y;
                     this->clicked_pixels_index++;
+
+                    // TODO: do this better
+                    if (this->clicked_pixels_index >= 2)
+                    {
+                        this->path = (int *) calloc(2000000, sizeof(int));
+                        if(!find_path_astar(
+                            this->map,
+                            this->clicked_squares[0],
+                            this->clicked_squares[1],
+                            this->path,
+                            0, // TODO: start using this
+                            &this->path_size
+                        ))
+                        {
+                            for (int i = this->path_size - 1; i >= 0; i--)
+                            {
+                                this->map->hitbox->data[this->path[i]] = 3;
+                            }
+                        }
+                    }
+                    // END OF TODO
+
                     return 1;
                 }
                 return 0;
@@ -177,7 +547,9 @@ public:
 /*
    Handles events that every widget has ignored.
 
-   @ event :: type of the event to be handled or ignored
+   @ event   :: type of the event to be handled or ignored
+
+   @ returns :: 0 if the event was ignored, 1 otherwise.
  */
 int global_event_handler(int event)
 {
