@@ -10,23 +10,33 @@
 #include <FL/Fl_PNG_Image.H>
 #include <FL/fl_ask.H>
 
-#include "binheap.h"
-#include "map.h"
-#include "astar.h"
+#include "binheap.hpp"
+#include "map.hpp"
+#include "astar.hpp"
 
 #define FRAME_TIME 0.0166f
-#define FLOOR_SIZE 15
+#define FLOOR_SIZE 9
+#define CAMERA_SPEED 40
 
 using namespace std;
 
 // controls debug_information shown, higher means more and 0 means no debug information.
 static int global_debug_level = 0;
+static int global_offset_x = 0;
+static int global_offset_y = 0;
+static int global_map_width = 0, global_map_height = 0; // TODO: maybe remove this (?)
+static int global_window_width = 0, global_window_height = 0;
+Fl_Double_Window *window;
 
 /*
    Updates the game and redraws the screen after a periodic delay of `FRAME_TIME` seconds.
  */ 
 void update(void *)
 {
+    // TODO: maybe remove this (?)
+    global_window_width = window->w();
+    global_window_height = window->h();
+
     Fl::redraw();
     Fl::repeat_timeout(FRAME_TIME, update);
 }
@@ -43,46 +53,24 @@ class DrawingArea : public Fl_Widget
 
     void debug_print_squares()
     {
-        // handle different debug levels
-        int k_increment = 1;
-        if (global_debug_level == 1) k_increment = 3;
-        else if (global_debug_level == 2) k_increment = 1;
-
         // show hitboxes
+        int unit_size = this->map->hitbox->unit_size;
         for (int i = 0; i < this->map->hitbox->width; i++)
         {
             for (int j = 0; j < this->map->hitbox->height; j++)
             {
-                for (int k = this->map->hitbox->unit_size * i; k < (i + 1) * this->map->hitbox->unit_size; k+=k_increment)
-                {
-                    for (int w = this->map->hitbox->unit_size * j; w < (j + 1) * this->map->hitbox->unit_size; w++)
-                    {
-                        if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 1)
-                        {
-                            fl_color(FL_GREEN);
-                            fl_point(k, w);
-                        }
-                        else if (global_debug_level == 2 && this->map->hitbox->data[i + j * this->map->hitbox->width] == 2)
-                        {
-                            fl_color(FL_BLUE);
-                            fl_point(k, w);
-                        }
-                        else if (global_debug_level == 2 && this->map->hitbox->data[i + j * this->map->hitbox->width] == 3)
-                        {
-                            fl_color(FL_RED);
-                            fl_point(k, w);
-                        }
-                        else
-                        {
-                            fl_color(FL_DARK3);
-                            fl_point(k, w);
-                        }
-                    }
-                }
+                if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 4) fl_color(FL_DARK_YELLOW);
+                else if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 1) fl_color(FL_GREEN);
+                else if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 2) fl_color(FL_BLUE);
+                else if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 3) fl_color(FL_RED);
+                else fl_color(FL_DARK3);
+
+                fl_rectf(global_offset_x + unit_size * i, global_offset_y + unit_size * j, unit_size, unit_size);
             }
         }
 
-        if (global_debug_level == 2)
+        // TODO: not working because of the movement system
+        if (global_debug_level == 1)
         {
             for (int i = 0; i < this->clicked_pixels_index; i++)
             {
@@ -94,7 +82,7 @@ class DrawingArea : public Fl_Widget
 
     void draw()
     {
-        map->img->draw(0, 0);
+        this->map->img->draw(global_offset_x, global_offset_y);
         fl_push_clip(x(),y(),w(),h());
         fl_push_matrix();
         if(global_debug_level) this->debug_print_squares();
@@ -113,24 +101,23 @@ class DrawingArea : public Fl_Widget
             case FL_PUSH:
                 if (Fl::event_button() == FL_LEFT_MOUSE)
                 {
-                    int x = Fl::event_x(), y = Fl::event_y();
+                    int x = Fl::event_x() - global_offset_x, y = Fl::event_y() - global_offset_y;
                     int index = (int) (floor((float) x/this->map->hitbox->unit_size) + floor((float) y/this->map->hitbox->unit_size) * this->map->hitbox->width);
 
                     if (this->map->hitbox->data[index] == 1) return 1;
 
-                    // TODO: do this better
+                    // TODO: do this better, currently not working
                     if (this->clicked_pixels_index <= 1) this->clicked_squares[this->clicked_pixels_index] = index;
-                    // END OF TODO
 
                     this->map->hitbox->data[index] = 2;
                     this->clicked_pixels[this->clicked_pixels_index][0] = x;
                     this->clicked_pixels[this->clicked_pixels_index][1] = y;
                     this->clicked_pixels_index++;
+                    // END OF TODO
 
                     // TODO: do this better
                     if (this->clicked_pixels_index >= 2)
                     {
-                        //this->path = (int *) malloc(40 * sizeof(int));
                         if(!find_path_astar(
                             this->map,
                             this->clicked_squares[0],
@@ -176,9 +163,13 @@ int global_event_handler(int event)
     switch (event)
     {
         case FL_SHORTCUT:
-            if (!strcmp(Fl::event_text(),"1")) global_debug_level = 0;
-            else if (!strcmp(Fl::event_text(),"2")) global_debug_level = 1;
-            else if (!strcmp(Fl::event_text(),"3")) global_debug_level = 2;
+            if (!strcmp(Fl::event_text(), "1")) global_debug_level = 0;
+            else if (!strcmp(Fl::event_text(), "2")) global_debug_level = 1;
+            else if (!strcmp(Fl::event_text(), "3")) global_debug_level = 2;
+            else if (Fl::event_key() == FL_Up && global_offset_y <= -CAMERA_SPEED) global_offset_y += CAMERA_SPEED;
+            else if (Fl::event_key() == FL_Down && global_offset_y >= global_window_height - global_map_height + CAMERA_SPEED) global_offset_y -= CAMERA_SPEED;
+            else if (Fl::event_key() == FL_Left && global_offset_x <= -CAMERA_SPEED) global_offset_x += CAMERA_SPEED;
+            else if (Fl::event_key() == FL_Right && global_offset_x >= global_window_width - global_map_width + CAMERA_SPEED) global_offset_x -= CAMERA_SPEED;
             else return 0;
             return 1;
     }
@@ -192,24 +183,29 @@ int global_event_handler(int event)
 int main(int argc, char** argv) {
 
     // try to open input file and load image
-    Fl_PNG_Image *img = new Fl_PNG_Image("./test2.png");
+    Fl_PNG_Image *img = new Fl_PNG_Image("./lol.png");
     if (img->fail())
     {
+        // TODO: remove this hardcoded line
         fl_alert("./test.png: %s", strerror(errno));
         exit(1);
     }
+
+    // TODO: maybe remove this (?)
+    global_map_width = img->w();
+    global_map_height = img->h();
 
     // create map using the loaded image
     Map *map = new Map(img, FLOOR_SIZE);
 
     // create window and drawing area
-    Fl_Double_Window window(map->img->w(), map->img->h());
+    window = new Fl_Double_Window(map->img->w(), map->img->h());
     DrawingArea drawing_area(map);
-    window.end();
+    window->end();
 
     // show window
-    window.show(argc, argv);
- 
+    window->show(argc, argv);
+
     // handle some events globally
     Fl::add_handler(global_event_handler);
 

@@ -37,10 +37,10 @@ public:
                 {
                     for (int w = this->hitbox->unit_size * j; w < (j + 1) * this->hitbox->unit_size && w < this->img->h(); w++)
                     {
-                        if (!this->img->array[w * img->w() * 3 + k] && !this->img->array[w * img->w() * 3 + k + 1] && !this->img->array[w * this->img->w() * 3 + k + 2]) counter++;
+                        if (this->img->array[w * img->w() * 3 + k] < 20 && this->img->array[w * img->w() * 3 + k + 1] < 20 && this->img->array[w * this->img->w() * 3 + k + 2] < 20) counter++;
                     }
                 }
-                if ((float) counter / pow(this->hitbox->unit_size, 2) > 0.25) this->hitbox->data[i + j * this->hitbox->width] = 1;
+                if ((float) counter / pow(this->hitbox->unit_size, 2) > 0.15) this->hitbox->data[i + j * this->hitbox->width] = 1;
                 else this->hitbox->data[i + j * this->hitbox->width] = 0;
             }
         }

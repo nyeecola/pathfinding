@@ -3,18 +3,24 @@
 
 #include <cmath>
 
-#include "binheap.h"
-#include "map.h"
+#include "binheap.hpp"
+#include "map.hpp"
 
 enum {OPEN = 1, CLOSED = 2};
 
 int _calculate_h_cost(int test_square, int target, Map *map)
 {
+#if DJIKSTRA
+    return 0;
+#endif
     int map_width = map->hitbox->width;
 
-    int y_offset = abs((test_square / map_width) - (target / map_width)) * 10;
-    int x_offset = abs((test_square - (test_square / map_width) * map_width) - (target - (target / map_width) * map_width)) * 10;
-    int h_cost = x_offset + y_offset;
+    int test_square_y = test_square / map_width;
+    int target_y = target / map_width;
+
+    int y_offset = abs(test_square_y - target_y);
+    int x_offset = abs((test_square - test_square_y * map_width) - (target - target_y * map_width));
+    int h_cost = (x_offset + y_offset) * 90; // TODO: find out why 100 is an overestimation
 
     return h_cost;
 }
@@ -23,8 +29,14 @@ int _calculate_g_cost(int test_square, int current_square, Map *map, int *g_cost
 {
     int g_cost;
 
-    if (test_square == current_square - map->hitbox->width) g_cost = g_costs[current_square] + 10;
-    else g_cost = g_costs[current_square] + 14;
+    if (test_square == current_square - map->hitbox->width ||
+        test_square == current_square + map->hitbox->width ||
+        test_square == current_square - 1                  ||
+        test_square == current_square + 1)
+    {
+        g_cost = g_costs[current_square] + 100;
+    }
+    else g_cost = g_costs[current_square] + 141;
 
     return g_cost;
 }
@@ -35,6 +47,11 @@ void _check_square(int current_square, int test_square, int start, int end, Map 
     // TODO: think more about how this map->hitbox->data should work for reals, this number thing isn't very pretty
     if (map->hitbox->data[test_square] != 1 && visited_list[test_square] != CLOSED)
     {
+        // DEBUG
+        map->hitbox->data[test_square] = 4;
+
+        int g_cost = _calculate_g_cost(test_square, current_square, map, g_costs);
+
         // if square has never been checked, calculate its costs
         // and put it into the to-be-visited list
         if (visited_list[test_square] != OPEN)
@@ -42,7 +59,6 @@ void _check_square(int current_square, int test_square, int start, int end, Map 
             visited_list[test_square] = OPEN;
             parents[test_square] = current_square;
 
-            int g_cost = _calculate_g_cost(test_square, current_square, map, g_costs);
             int h_cost = _calculate_h_cost(test_square, end, map);
 
             g_costs[test_square] = g_cost;
@@ -56,8 +72,6 @@ void _check_square(int current_square, int test_square, int start, int end, Map 
         // use the current square
         else
         {
-            int g_cost = _calculate_g_cost(test_square, current_square, map, g_costs);
-
             if (g_cost < g_costs[test_square])
             {
                 parents[test_square] = current_square;
