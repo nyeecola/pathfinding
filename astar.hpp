@@ -12,7 +12,7 @@ int _calculate_h_cost(int test_square, int target, Map *map)
 {
 #if DJIKSTRA
     return 0;
-#endif
+#else
     int map_width = map->hitbox->width;
 
     int test_square_y = test_square / map_width;
@@ -20,9 +20,10 @@ int _calculate_h_cost(int test_square, int target, Map *map)
 
     int y_offset = abs(test_square_y - target_y);
     int x_offset = abs((test_square - test_square_y * map_width) - (target - target_y * map_width));
-    int h_cost = (x_offset + y_offset) * 90; // TODO: find out why 100 is an overestimation
+    int h_cost = (x_offset + y_offset) * 8; // TODO: find out why 100 is an overestimation
 
     return h_cost;
+#endif
 }
 
 int _calculate_g_cost(int test_square, int current_square, Map *map, int *g_costs)
@@ -34,9 +35,9 @@ int _calculate_g_cost(int test_square, int current_square, Map *map, int *g_cost
         test_square == current_square - 1                  ||
         test_square == current_square + 1)
     {
-        g_cost = g_costs[current_square] + 100;
+        g_cost = g_costs[current_square] + 10;
     }
-    else g_cost = g_costs[current_square] + 141;
+    else g_cost = g_costs[current_square] + 14;
 
     return g_cost;
 }

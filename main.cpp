@@ -14,8 +14,8 @@
 #include "map.hpp"
 #include "astar.hpp"
 
-#define FRAME_TIME 0.0166f
-#define FLOOR_SIZE 9
+#define UPDATE_TICK 5
+#define FLOOR_SIZE 5
 #define CAMERA_SPEED 40
 
 using namespace std;
@@ -28,8 +28,11 @@ static int global_map_width = 0, global_map_height = 0; // TODO: maybe remove th
 static int global_window_width = 0, global_window_height = 0;
 Fl_Double_Window *window;
 
+static int global_start = -1;
+static int global_end = -1;
+
 /*
-   Updates the game and redraws the screen after a periodic delay of `FRAME_TIME` seconds.
+   Updates the game and redraws the screen after a periodic delay of `UPDATE_TICK` seconds.
  */ 
 void update(void *)
 {
@@ -37,8 +40,7 @@ void update(void *)
     global_window_width = window->w();
     global_window_height = window->h();
 
-    Fl::redraw();
-    Fl::repeat_timeout(FRAME_TIME, update);
+    Fl::repeat_timeout(UPDATE_TICK, update);
 }
 
 /*
@@ -59,8 +61,9 @@ class DrawingArea : public Fl_Widget
         {
             for (int j = 0; j < this->map->hitbox->height; j++)
             {
-                if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 4) fl_color(FL_DARK_YELLOW);
-                else if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 1) fl_color(FL_GREEN);
+                // TODO: put this back in, it works (but slows down the path shower)
+                /*if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 4) fl_color(FL_DARK_YELLOW);
+                else*/ if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 1) fl_color(FL_GREEN);
                 else if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 2) fl_color(FL_BLUE);
                 else if (this->map->hitbox->data[i + j * this->map->hitbox->width] == 3) fl_color(FL_RED);
                 else fl_color(FL_DARK3);
@@ -85,14 +88,23 @@ class DrawingArea : public Fl_Widget
         this->map->img->draw(global_offset_x, global_offset_y);
         fl_push_clip(x(),y(),w(),h());
         fl_push_matrix();
-        if(global_debug_level) this->debug_print_squares();
+        if (global_debug_level) this->debug_print_squares();
+        // TODO: clean up this
+        int unit_size = this->map->hitbox->unit_size;
+        for (int i = this->path_size - 1; i >= 0; i--)
+        {
+            int index = this->path[i];
+            int y = index / this->map->hitbox->width;
+            int x = index - y * this->map->hitbox->width;
+            fl_rectf(global_offset_x + unit_size * x, global_offset_y + unit_size * y, unit_size, unit_size, FL_RED);
+        }
         fl_pop_matrix();
         fl_pop_clip();
     }
 
     int clicked_squares[2];
-    int *path;
-    int path_size;
+    int *path = NULL;
+    int path_size = 0;
 
     int handle(int event)
     {
@@ -106,34 +118,65 @@ class DrawingArea : public Fl_Widget
 
                     if (this->map->hitbox->data[index] == 1) return 1;
 
+                    // TODO: STILL IN PROGRESS
+                    global_start = index;
+
                     // TODO: do this better, currently not working
                     if (this->clicked_pixels_index <= 1) this->clicked_squares[this->clicked_pixels_index] = index;
 
-                    this->map->hitbox->data[index] = 2;
+                    //this->map->hitbox->data[index] = 2;
+
                     this->clicked_pixels[this->clicked_pixels_index][0] = x;
                     this->clicked_pixels[this->clicked_pixels_index][1] = y;
                     this->clicked_pixels_index++;
                     // END OF TODO
+                    
+                    goto new_path;
+                }
+                else if (Fl::event_button() == FL_RIGHT_MOUSE)
+                {
+                    int x = Fl::event_x() - global_offset_x, y = Fl::event_y() - global_offset_y;
+                    int index = (int) (floor((float) x/this->map->hitbox->unit_size) + floor((float) y/this->map->hitbox->unit_size) * this->map->hitbox->width);
 
-                    // TODO: do this better
-                    if (this->clicked_pixels_index >= 2)
+                    // TODO: STILL IN PROGRESS
+                    if (this->map->hitbox->data[index] != 1) global_end = index;
+
+                    goto new_path;
+                }
+
+new_path:
+                if (global_start != -1 && global_end != -1)
+                {
+                    // clean previous path
+                    for (int i = this->path_size - 1; i >= 0; i--)
                     {
-                        if(!find_path_astar(
-                            this->map,
-                            this->clicked_squares[0],
-                            this->clicked_squares[1],
-                            &this->path,
-                            &this->path_size
-                        ))
+                        this->map->hitbox->data[this->path[i]] = 0;
+                    }
+                    // TODO: put this back in, it works (but slows down the path shower)
+                    /*for (int i = 0; i < this->map->hitbox->width; i++)
+                    {
+                        for (int j = 0; j < this->map->hitbox->width; j++)
                         {
-                            for (int i = this->path_size - 1; i >= 0; i--)
-                            {
-                                this->map->hitbox->data[this->path[i]] = 3;
-                            }
+                            int index = i + j * this->map->hitbox->width;
+
+                            if (this->map->hitbox->data[index] != 1) this->map->hitbox->data[index] = 0;
+                        }
+                    }*/
+                    
+                    if(!find_path_astar(
+                                this->map,
+                                global_start,
+                                global_end,
+                                &this->path,
+                                &this->path_size
+                                ))
+                    {
+                        for (int i = this->path_size - 1; i >= 0; i--)
+                        {
+                            this->map->hitbox->data[this->path[i]] = 3;
                         }
                     }
-                    // END OF TODO
-
+                    Fl::redraw();
                     return 1;
                 }
                 return 0;
@@ -171,6 +214,7 @@ int global_event_handler(int event)
             else if (Fl::event_key() == FL_Left && global_offset_x <= -CAMERA_SPEED) global_offset_x += CAMERA_SPEED;
             else if (Fl::event_key() == FL_Right && global_offset_x >= global_window_width - global_map_width + CAMERA_SPEED) global_offset_x -= CAMERA_SPEED;
             else return 0;
+            Fl::redraw();
             return 1;
     }
 
@@ -183,7 +227,7 @@ int global_event_handler(int event)
 int main(int argc, char** argv) {
 
     // try to open input file and load image
-    Fl_PNG_Image *img = new Fl_PNG_Image("./lol.png");
+    Fl_PNG_Image *img = new Fl_PNG_Image("./map.png");
     if (img->fail())
     {
         // TODO: remove this hardcoded line
@@ -209,8 +253,8 @@ int main(int argc, char** argv) {
     // handle some events globally
     Fl::add_handler(global_event_handler);
 
-    // schedule a periodic update after a delay of `FRAME_TIME` seconds
-    Fl::add_timeout(FRAME_TIME, update);
+    // schedule a periodic update after a delay of `UPDATE_TICK` seconds
+    Fl::add_timeout(UPDATE_TICK, update);
 
     return Fl::run();
 }
