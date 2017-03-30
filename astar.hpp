@@ -20,7 +20,7 @@ int _calculate_h_cost(int test_square, int target, Map *map)
 
     int y_offset = abs(test_square_y - target_y);
     int x_offset = abs((test_square - test_square_y * map_width) - (target - target_y * map_width));
-    int h_cost = (x_offset + y_offset) * 8; // TODO: find out why 100 is an overestimation
+    int h_cost = (x_offset + y_offset) * 8; // TODO: find out why 10 is an overestimation
 
     return h_cost;
 #endif
