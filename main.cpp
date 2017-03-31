@@ -57,8 +57,37 @@ class MapArea : public Fl_Widget
     int path_size = 0;
     int path_start = -1;
     int path_end = -1;
+    int path_start_pixel[2] = {-1, -1};
+    int path_end_pixel[2] = {-1, -1};
 
-    void debug_print_path()
+    // walks on top of path squares (always passing exactly in the center of each one)
+    void print_pixel_path()
+    {
+        int pixel_start_x = global_camera->x + path_start_pixel[0];
+        int pixel_start_y = global_camera->y + path_start_pixel[1];
+        int pixel_end_x = global_camera->x + path_end_pixel[0];
+        int pixel_end_y = global_camera->y + path_end_pixel[1];
+
+        fl_color(FL_GREEN);
+        int last_pixel[2] = {pixel_start_x, pixel_start_y};
+        for (int i = this->path_size - 2; i >= 1 ; i--)
+        {
+            int index = this->path[i];
+            int y = index / global_map->hitbox->width;
+            int x = index - y * global_map->hitbox->width;
+            int pixel_x = (x * global_map->hitbox->unit_size) + global_map->hitbox->unit_size / 2;
+            int pixel_y = (y * global_map->hitbox->unit_size) + global_map->hitbox->unit_size / 2;
+            int next_pixel[2] = {global_camera->x + pixel_x, global_camera->y + pixel_y};
+
+            fl_line(last_pixel[0], last_pixel[1], next_pixel[0], next_pixel[1]);
+
+            last_pixel[0] = next_pixel[0];
+            last_pixel[1] = next_pixel[1];
+        }
+        fl_line(last_pixel[0], last_pixel[1], pixel_end_x, pixel_end_y);
+    }
+
+    void debug_print_sprite_path()
     {
         int unit_size = global_map->hitbox->unit_size;
         for (int i = this->path_size - 1; i >= 0; i--)
@@ -96,7 +125,11 @@ class MapArea : public Fl_Widget
         this->debug_print_squares();
 #endif
         // TODO: print line_path instead of sprite_path on normal mode
-        this->debug_print_path();
+        if (this->path)
+        {
+            this->debug_print_sprite_path();
+            this->print_pixel_path();
+        }
         fl_pop_matrix();
         fl_pop_clip();
     }
@@ -142,11 +175,15 @@ class MapArea : public Fl_Widget
                     {
                         if (global_map->hitbox->data[index] == TERRAIN) return 1;
                         this->path_start = index;
+                        this->path_start_pixel[0] = raw_x;
+                        this->path_start_pixel[1] = raw_y;
                     }
                     else if (Fl::event_button() == FL_RIGHT_MOUSE)
                     {
                         if (global_map->hitbox->data[index] == TERRAIN) return 1;
                         this->path_end = index;
+                        this->path_end_pixel[0] = raw_x;
+                        this->path_end_pixel[1] = raw_y;
                     }
 
                     if (this->path_start != -1 && this->path_end != -1)
