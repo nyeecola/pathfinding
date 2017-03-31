@@ -13,9 +13,12 @@
 // TODO: maybe find a way to better update the screen anyway
 #define CAMERA_SPEED 30
 
-#define SPRITE_SIZE 15
+#define SPRITE_SIZE 9
 #define TERRAIN_BLOCK_RATIO 0.15
 #define TERRAIN_COLOR_MAX_WHITENESS 20
+
+#define WINDOW_WIDTH 1200
+#define WINDOW_HEIGHT 800
 
 using namespace std;
 

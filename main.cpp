@@ -199,7 +199,7 @@ class MapArea : public Fl_Widget
     }
 
 public:
-    MapArea() : Fl_Widget(0, 0, global_map->img->w(), global_map->img->h()) {}
+    MapArea() : Fl_Widget(0, 0, global_window->w(), global_window->h()) {}
 };
 
 /*
@@ -222,12 +222,20 @@ int main(int argc, char** argv) {
     global_camera = new Camera(0, 0, CAMERA_SPEED);
 
     // create window and drawing area
-    global_window = new Fl_Double_Window(global_map->img->w(), global_map->img->h());
+    global_window = new Fl_Double_Window(WINDOW_WIDTH, WINDOW_HEIGHT);
     new MapArea();
     global_window->end();
 
     // show window
     global_window->show(argc, argv);
+
+    // initialize keys pressed
+    {
+        global_keys_pressed[FL_Up] = false;
+        global_keys_pressed[FL_Down] = false;
+        global_keys_pressed[FL_Left] = false;
+        global_keys_pressed[FL_Right] = false;
+    }
 
     // schedule a periodic update after a delay of `UPDATE_TICK_DELAY` seconds
     Fl::add_timeout(UPDATE_TICK_DELAY, update);
