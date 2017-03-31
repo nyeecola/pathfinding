@@ -15,33 +15,33 @@
 #include "map.hpp"
 #include "astar.hpp"
 #include "constants.hpp"
+#include "camera.hpp"
 
 Map *global_map;
 Fl_Double_Window *global_window;
 map<int, bool> global_keys_pressed;
-static int global_offset_x = 0;
-static int global_offset_y = 0;
+Camera *global_camera;
 
 /*
  * Updates the game and redraws the screen after a periodic delay of `UPDATE_TICK_DELAY` seconds.
  */ 
 void update(void *)
 {
-    if (global_keys_pressed[FL_Up] && global_offset_y <= -CAMERA_SPEED)
+    if (global_keys_pressed[FL_Up] && global_camera->y <= -global_camera->speed)
     {
-        global_offset_y += CAMERA_SPEED;
+        global_camera->y += global_camera->speed;
     }
-    if (global_keys_pressed[FL_Down] && global_offset_y >= global_window->h() - global_map->img->h() + CAMERA_SPEED)
+    if (global_keys_pressed[FL_Down] && global_camera->y >= global_window->h() - global_map->img->h() + global_camera->speed)
     {
-        global_offset_y -= CAMERA_SPEED;
+        global_camera->y -= global_camera->speed;
     }
-    if (global_keys_pressed[FL_Left] && global_offset_x <= -CAMERA_SPEED)
+    if (global_keys_pressed[FL_Left] && global_camera->x <= -global_camera->speed)
     {
-        global_offset_x += CAMERA_SPEED;
+        global_camera->x += global_camera->speed;
     }
-    if (global_keys_pressed[FL_Right] && global_offset_x >= global_window->w() - global_map->img->w() + CAMERA_SPEED)
+    if (global_keys_pressed[FL_Right] && global_camera->x >= global_window->w() - global_map->img->w() + global_camera->speed)
     {
-        global_offset_x -= CAMERA_SPEED;
+        global_camera->x -= global_camera->speed;
     }
 
     Fl::redraw();
@@ -66,7 +66,7 @@ class MapArea : public Fl_Widget
             int index = this->path[i];
             int y = index / global_map->hitbox->width;
             int x = index - y * global_map->hitbox->width;
-            fl_rectf(global_offset_x + unit_size * x, global_offset_y + unit_size * y, unit_size, unit_size, FL_RED);
+            fl_rectf(global_camera->x + unit_size * x, global_camera->y + unit_size * y, unit_size, unit_size, FL_RED);
         }
     }
 
@@ -80,7 +80,7 @@ class MapArea : public Fl_Widget
             {
                 if (global_map->hitbox->data[i + j * global_map->hitbox->width] == TERRAIN)
                 {
-                    fl_rectf(global_offset_x + unit_size * i, global_offset_y + unit_size * j, unit_size, unit_size, FL_BLUE);
+                    fl_rectf(global_camera->x + unit_size * i, global_camera->y + unit_size * j, unit_size, unit_size, FL_BLUE);
                 }
             }
         }
@@ -89,7 +89,7 @@ class MapArea : public Fl_Widget
 
     void draw()
     {
-        global_map->img->draw(global_offset_x, global_offset_y);
+        global_map->img->draw(global_camera->x, global_camera->y);
         fl_push_clip(x(),y(),w(),h());
         fl_push_matrix();
 #if DEBUG
@@ -133,7 +133,7 @@ class MapArea : public Fl_Widget
 
             case FL_PUSH:
                 {
-                    int raw_x = Fl::event_x() - global_offset_x, raw_y = Fl::event_y() - global_offset_y;
+                    int raw_x = Fl::event_x() - global_camera->x, raw_y = Fl::event_y() - global_camera->y;
                     int index_y = raw_y / global_map->hitbox->unit_size;
                     int index_x = raw_x / global_map->hitbox->unit_size; 
                     int index = index_x + index_y * global_map->hitbox->width;
@@ -181,9 +181,12 @@ int main(int argc, char** argv) {
     // create map using the loaded image
     global_map = new Map(img);
 
+    // create camera
+    global_camera = new Camera(0, 0, CAMERA_SPEED);
+
     // create window and drawing area
     global_window = new Fl_Double_Window(global_map->img->w(), global_map->img->h());
-    MapArea *drawing_area = new MapArea();
+    new MapArea();
     global_window->end();
 
     // show window
