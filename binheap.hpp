@@ -57,6 +57,11 @@ public:
         this->current_size = 0;
     }
 
+    ~BinHeap()
+    {
+        free(this->data);
+    }
+
     void insert(int value)
     {
         this->data[this->current_size] = value;

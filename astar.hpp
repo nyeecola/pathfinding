@@ -2,19 +2,19 @@
 #define ASTAR
 
 #include <cmath>
+#include <cstring>
 
 #include "binheap.hpp"
 #include "map.hpp"
+#include "constants.hpp"
 
 enum {OPEN = 1, CLOSED = 2};
 
-int _calculate_h_cost(int test_square, int target, Map *map)
+int _calculate_h_cost(int test_square, int target, int map_width)
 {
 #if DJIKSTRA
     return 0;
 #else
-    int map_width = map->hitbox->width;
-
     int test_square_y = test_square / map_width;
     int target_y = target / map_width;
 
@@ -26,13 +26,13 @@ int _calculate_h_cost(int test_square, int target, Map *map)
 #endif
 }
 
-int _calculate_g_cost(int test_square, int current_square, Map *map, int *g_costs)
+int _calculate_g_cost(int test_square, int current_square, int map_width, int *g_costs)
 {
     int g_cost;
 
-    if (test_square == current_square - map->hitbox->width ||
-        test_square == current_square + map->hitbox->width ||
-        test_square == current_square - 1                  ||
+    if (test_square == current_square - map_width ||
+        test_square == current_square + map_width ||
+        test_square == current_square - 1         ||
         test_square == current_square + 1)
     {
         g_cost = g_costs[current_square] + 10;
@@ -45,13 +45,9 @@ int _calculate_g_cost(int test_square, int current_square, Map *map, int *g_cost
 void _check_square(int current_square, int test_square, int start, int end, Map *map, int *visited_list, int *parents, int *g_costs, int *f_costs, BinHeap *heap)
 {
     // check if square is walkable and has not yet been visited
-    // TODO: think more about how this map->hitbox->data should work for reals, this number thing isn't very pretty
-    if (map->hitbox->data[test_square] != 1 && visited_list[test_square] != CLOSED)
+    if (map->hitbox->data[test_square] != TERRAIN && visited_list[test_square] != CLOSED)
     {
-        // DEBUG
-        map->hitbox->data[test_square] = 4;
-
-        int g_cost = _calculate_g_cost(test_square, current_square, map, g_costs);
+        int g_cost = _calculate_g_cost(test_square, current_square, map->hitbox->width, g_costs);
 
         // if square has never been checked, calculate its costs
         // and put it into the to-be-visited list
@@ -60,7 +56,7 @@ void _check_square(int current_square, int test_square, int start, int end, Map 
             visited_list[test_square] = OPEN;
             parents[test_square] = current_square;
 
-            int h_cost = _calculate_h_cost(test_square, end, map);
+            int h_cost = _calculate_h_cost(test_square, end, map->hitbox->width);
 
             g_costs[test_square] = g_cost;
             f_costs[test_square] = g_cost + h_cost;
@@ -77,7 +73,7 @@ void _check_square(int current_square, int test_square, int start, int end, Map 
             {
                 parents[test_square] = current_square;
 
-                int h_cost = _calculate_h_cost(test_square, end, map);
+                int h_cost = _calculate_h_cost(test_square, end, map->hitbox->width);
 
                 g_costs[test_square] = g_cost;
                 f_costs[test_square] = g_cost + h_cost;
@@ -97,11 +93,13 @@ void _check_square(int current_square, int test_square, int start, int end, Map 
    @ path            :: a pointer that will receive the resulting path, if one is found
    @ found_path_size :: the size of the path found, if none was found, this won't change
 
-   @ returns         :: 0 if the path was found, -1 if there is no path
+   @ returns         :: 1 if the path was found, 0 if there is no path
  */
 int find_path_astar(Map *map, int start, int end, int **path, int *found_path_size)
 {
-    int map_size = map->hitbox->width * map->hitbox->height;
+    int map_height = map->hitbox->height;
+    int map_width = map->hitbox->width;
+    int map_size = map_width * map_height;
     int *list = (int *) calloc(map_size, sizeof(int));
     int *parents = (int *) calloc(map_size, sizeof(int));
     int *f_costs = (int *) calloc(map_size, sizeof(int));
@@ -116,9 +114,6 @@ int find_path_astar(Map *map, int start, int end, int **path, int *found_path_si
     // start searching for a path, using the given square as the starting point
     for (;;)
     {
-        int map_height = map->hitbox->height;
-        int map_width = map->hitbox->width;
-
         // find the lowest cost square on the open list
         int current_square = heap->pop_next();
         int current_square_y = current_square / map_width;
@@ -163,17 +158,16 @@ int find_path_astar(Map *map, int start, int end, int **path, int *found_path_si
             for (adj_square = current_square + map_width - 1; adj_square <= current_square + map_width + 1; adj_square++)
             {
                 if (adj_square >= map_width * map_height) break;
-                if (adj_square < (current_square_y + 1) * map_width || adj_square >= (current_square_y + 2) * map_width) continue;
+                if (adj_square < (current_square_y + 1) * map_width ||
+                    adj_square >= (current_square_y + 2) * map_width) continue;
 
                 _check_square(current_square, adj_square, start, end, map, list, parents, g_costs, f_costs, heap);
             }
         }
     }
 
-    // path not found
-    if (!path_found) return -1;
-
     // path found, calculate its size and then recreate it
+    if (path_found)
     {
         int current_square = end;
         *found_path_size = 1;
@@ -183,6 +177,7 @@ int find_path_astar(Map *map, int start, int end, int **path, int *found_path_si
             *found_path_size += 1;
         }
 
+        if (*path != NULL) free(*path);
         *path = (int *) malloc((*found_path_size) * sizeof(int));
 
         current_square = end;
@@ -194,8 +189,18 @@ int find_path_astar(Map *map, int start, int end, int **path, int *found_path_si
         }
     }
 
+    // free memory
+    free(list);
+    free(parents);
+    free(f_costs);
+    free(g_costs);
+    delete heap;
+
+    // failure
+    if (!path_found) return 0;
+
     // success
-    return 0;
+    return 1;
 }
 
 #endif

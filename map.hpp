@@ -1,21 +1,28 @@
 #ifndef MAP
 #define MAP
 
-// TODO: create a constants file
-#define SPRITE_SIZE 15
+#include "constants.hpp"
 
 /*
-   Defines a map's collision mask.
+ * Defines a map's collision mask.
  */
 typedef struct MapHitbox_
 {
     int width, height;
     int unit_size;
-    unsigned char *data;
+    unsigned short int *data;
 } MapHitbox;
 
 /*
-   Defines a map that has a visual representation (img) and a collision mask (hitbox).
+ * Defines a sprite type.
+ */
+enum SpriteType {
+    WALKABLE = 0,
+    TERRAIN = 1,
+};
+
+/*
+ * Defines a map that has a visual representation (img) and a collision mask (hitbox).
  */
 class Map
 {
@@ -29,7 +36,7 @@ public:
         this->hitbox->unit_size = SPRITE_SIZE;
         this->hitbox->width = ceil((float) this->img->w() / this->hitbox->unit_size);
         this->hitbox->height = ceil((float) this->img->h() / this->hitbox->unit_size);
-        this->hitbox->data = (unsigned char *) malloc(3 * this->hitbox->width * this->hitbox->height);
+        this->hitbox->data = (unsigned short int *) malloc(3 * this->hitbox->width * this->hitbox->height);
 
         for (int i = 0; i < this->hitbox->width; i++)
         {
@@ -44,16 +51,16 @@ public:
                          w < (j + 1) * this->hitbox->unit_size && w < this->img->h();
                          w++)
                     {
-                        if (this->img->array[w * img->w() * 3 + k] < 20 &&
-                            this->img->array[w * img->w() * 3 + k + 1] < 20 &&
-                            this->img->array[w * this->img->w() * 3 + k + 2] < 20) counter++;
+                        if (this->img->array[w * img->w() * 3 + k] < TERRAIN_COLOR_MAX_WHITENESS &&
+                            this->img->array[w * img->w() * 3 + k + 1] < TERRAIN_COLOR_MAX_WHITENESS &&
+                            this->img->array[w * this->img->w() * 3 + k + 2] < TERRAIN_COLOR_MAX_WHITENESS) counter++;
                     }
                 }
-                if ((float) counter / pow(this->hitbox->unit_size, 2) > 0.15)
+                if ((float) counter / pow(this->hitbox->unit_size, 2) > TERRAIN_BLOCK_RATIO)
                 {
-                    this->hitbox->data[i + j * this->hitbox->width] = 1;
+                    this->hitbox->data[i + j * this->hitbox->width] = TERRAIN;
                 }
-                else this->hitbox->data[i + j * this->hitbox->width] = 0;
+                else this->hitbox->data[i + j * this->hitbox->width] = WALKABLE;
             }
         }
     }
@@ -62,6 +69,12 @@ public:
     {
         this->img = img;
         this->create_image_hitbox();
+    }
+
+    ~Map()
+    {
+        free(this->hitbox->data);
+        free(this->hitbox);
     }
 };
 
